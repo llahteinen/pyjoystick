@@ -41,6 +41,13 @@ class Joystick(BaseJoystick):
         return Stash(cls(i) for i in range(sdl2.SDL_NumJoysticks()))  # Use identifier not instance id.
 
     def __new__(cls, identifier=None, instance_id=None, *args, **kwargs):
+        """
+        identifier: device index (int) for SDL_JoystickOpen or name (str) for SDL_JoystickName
+        instance_id: SDL_JoystickID (int)
+
+        The term "device_index" identifies currently plugged in joystick devices between 0 and SDL_NumJoysticks(),
+        with the exact joystick behind a device_index changing as joysticks are plugged and unplugged.
+        """
         # Check init
         if not get_init():
             init()
@@ -48,35 +55,45 @@ class Joystick(BaseJoystick):
         # Create the object
         joy = super().__new__(cls)
 
+        # The device_index argument refers to the N'th joystick presently recognized by SDL on the system.
+        # It is NOT the same as the instance ID used to identify the joystick in future events.
+        # device_index should not be stored in the Joystick object because index can change at any time when adding or removing joysticks from the system.
+        device_index = None
+
+        # instance_id: SDL_JoystickID (int)
+        # This is a unique ID for a joystick for the time it is connected to the system, and is never reused for the
+        # lifetime of the application.
         if instance_id is not None:
-            # Create the underlying joystick from the instance id.
+            # Get the underlying joystick from the instance id (does NOT create a new one)
             # SDL_JOYDEVICEREMOVED and all other SDL_JOY#### events give the instance id
             joy.joystick = sdl2.SDL_JoystickFromInstanceID(instance_id)
-            # print('Instance ID:', raw_joystick, SDL_JoystickGetAttached(raw_joystick))
+            # print('Instance ID:', joy.joystick, sdl2.SDL_JoystickGetAttached(joy.joystick))
         else:
             # Create the underlying joystick from the enumerated identifier
             # SDL_JOYDEVICEADDED and SDL_NumJoysticks use open
-            if identifier is None:
+            if identifier is None: # Opens the first enumerated joystick
                 identifier = 0
-            if isinstance(identifier, str):
+            if isinstance(identifier, str): # identifier is joystick name
                 # Get the joystick from the name or None if not found!
                 for i in range(sdl2.SDL_NumJoysticks()):
+                    # Open using device_index (i)
                     raw_joystick = sdl2.SDL_JoystickOpen(i)
                     try:
                         if sdl2.SDL_JoystickName(raw_joystick).decode('utf-8') == identifier:
                             joy.joystick = raw_joystick
-                            instance_id = i
+                            device_index = i
                             break
                     except:
                         pass
-            else:
-                instance_id = identifier
-                joy.joystick = sdl2.SDL_JoystickOpen(identifier)
+            else: # identifier is device_index
+                # Open using device_index
+                device_index = identifier
+                joy.joystick = sdl2.SDL_JoystickOpen(device_index)
             # print('ID:', raw_joystick, SDL_JoystickGetAttached(raw_joystick))
 
         try:
-            joy.identifier = sdl2.SDL_JoystickID(instance_id).value
-            # joy.identifier = SDL_JoystickInstanceID(raw_joystick)
+            # joy.identifier is instance id
+            joy.identifier = sdl2.SDL_JoystickInstanceID(joy.joystick)
             joy.name = sdl2.SDL_JoystickName(joy.joystick).decode('utf-8')
             joy.numaxes = sdl2.SDL_JoystickNumAxes(joy.joystick)
             joy.numbuttons = sdl2.SDL_JoystickNumButtons(joy.joystick)
@@ -87,11 +104,16 @@ class Joystick(BaseJoystick):
             pass
 
         # Try to get the gamepad object
+        # This will only work for actual game pad devices, not for regular joysticks
         try:
-            joy.gamecontroller = sdl2.SDL_GameControllerOpen(joy.identifier)
-            # FromInstanceId does not Attach!
-            # joy.gamecontroller = SDL_GameControllerFromInstanceID(SDL_JoystickInstanceID(joy.joystick)
-            # print('ID:', SDL_GameControllerGetAttached(joy.gamecontroller))
+            if instance_id is not None: # SDL_GameController object should already exist.
+                # Instance ID should be the same as our Joystick instance ID (?) This is not clear in the docs.
+                joy.gamecontroller = sdl2.SDL_GameControllerFromInstanceID(sdl2.SDL_JoystickInstanceID(joy.joystick))
+            else:
+                # Create new SDL_GameController instance with joystick device_index
+                # SDL_GameController* SDL_GameControllerOpen(int joystick_index)
+                # joystick_index is the same as the device_index passed to SDL_JoystickOpen()
+                joy.gamecontroller = sdl2.SDL_GameControllerOpen(device_index)
 
             # Get mapping
             try:
@@ -104,6 +126,7 @@ class Joystick(BaseJoystick):
                 joy.key_mapping = {}
                 joy.controller_mapping = {}
         except:
+            # Joystick probably wasn't a gamepad
             joy.gamecontroller = None
             joy.key_mapping = {}
             joy.controller_mapping = {}

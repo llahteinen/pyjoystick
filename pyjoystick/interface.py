@@ -373,7 +373,7 @@ class Joystick(object):
         self.get_key(key).set_value(key.value)
 
     def get_id(self):
-        """Return the joystick id."""
+        """Return the joystick instance id."""
         return self.identifier
 
     def get_name(self):
