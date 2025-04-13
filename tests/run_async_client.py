@@ -7,6 +7,9 @@ async def tcp_print_client():
     message = ''
     while message != 'quit':
         data = await reader.read(4096)
+        if not data:
+            print("Server disconnected")
+            break
         message = data.decode('utf-8')
         print(message)
 

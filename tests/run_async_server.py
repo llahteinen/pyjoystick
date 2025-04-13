@@ -16,6 +16,10 @@ if __name__ == '__main__':
     devices = Joystick.get_joysticks()
     print("Devices:", devices)
 
+    if not devices:
+        print("No joysticks detected")
+        exit(1)
+
     monitor = devices[0]
     monitor_keytypes = [Key.AXIS]
 
@@ -33,7 +37,9 @@ if __name__ == '__main__':
         for client in cs:
             client.write(msg)
             # await client.drain()
-        await asyncio.gather(*(client.drain() for client in cs), loop=loop)
+        # Changed in version 3.10: Removed the loop parameter.
+        await asyncio.gather(*(client.drain() for client in cs)) # Didn't investigate if this fix alone is really enough, but seems to be working.
+        # await asyncio.gather(*(client.drain() for client in cs), loop=loop) # Pre Python 3.10
         print('\r', str_msg, end=newline, flush=True)
 
 
