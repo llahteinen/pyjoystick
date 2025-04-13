@@ -1,6 +1,4 @@
 import os
-import sys
-import platform
 import ctypes
 import threading
 
@@ -135,41 +133,52 @@ class Joystick(BaseJoystick):
         except:
             pass
 
+# end of class Joystick(BaseJoystick)
 
-def get_init(*modules):
-    """Return if the given module was initialized."""
-    if len(modules) == 0:
-        modules = (sdl2.SDL_INIT_GAMECONTROLLER, sdl2.SDL_INIT_JOYSTICK)
+def get_init(*subsystems):
+    """Return if all the given subsystems were initialized."""
+    if len(subsystems) == 0:
+        subsystems = (sdl2.SDL_INIT_GAMECONTROLLER, sdl2.SDL_INIT_JOYSTICK)
     was_init = True
-    for module in modules:
-        was_init = was_init and sdl2.SDL_WasInit(module)
+    for subsystem in subsystems:
+        was_init = was_init and sdl2.SDL_WasInit(subsystem)
+        # SDL_WasInit: Get a mask of the specified subsystems which are currently initialized.
+        # (Uint32) Returns a mask of all initialized subsystems if flags is 0, otherwise it returns the initialization status of the specified subsystems.
     return was_init
 
 
-def init(*modules):
-    """Initialize the given module.
+def init(*subsystems):
+    """Initialize the given subsystem(s).
 
     Note:
         SDL_INIT_GAMECONTROLLER also initializes the joystick subsystem.
     """
-    if len(modules) == 0:
-        modules = (sdl2.SDL_INIT_GAMECONTROLLER, sdl2.SDL_INIT_JOYSTICK)
-    for module in modules:
-        if get_init(module):
-            quit(module)
-        sdl2.SDL_Init(module)
+    if len(subsystems) == 0:
+        subsystems = (sdl2.SDL_INIT_GAMECONTROLLER, sdl2.SDL_INIT_JOYSTICK)
+    flags = 0
+    for subsystem in subsystems:
+        flags = flags | subsystem
+    # Subsystem initializations are reference counted. Call SDL_QuitSubSystem as many times as you have called SDL_Init for it.
+    if get_init(flags):
+        sdl2.SDL_QuitSubSystem(flags)
+    # int SDL_Init(Uint32 flags);
+    # Uint32 flags subsystem initialization flags.
+    res = sdl2.SDL_Init(flags)
 
+def quit(*subsystems):
+    """Quit the given subsystem(s).
 
-def quit(*modules):
-    """Quit the given module."""
-    if len(modules) == 0:
-        modules = (sdl2.SDL_INIT_EVERYTHING,)
-    for module in modules:
-        try:
-            sdl2.SDL_QUIT(module)
-        except:
-            pass
-
+    Note:
+        SDL_INIT_GAMECONTROLLER also quits the joystick subsystem.
+    """
+    if len(subsystems) == 0:
+        # Only quit the subsystems pyjoystick is using, not everything
+        subsystems = (sdl2.SDL_INIT_GAMECONTROLLER, sdl2.SDL_INIT_JOYSTICK)
+    flags = 0
+    for subsystem in subsystems:
+        flags = flags | subsystem
+    # SDL_Quit() quits all subsystems, and it doesn't take arguments. SDL_QuitSubSystem(flags) can be used to deinit a single subsystem.
+    sdl2.SDL_QuitSubSystem(flags)
 
 def get_guid(joystick):
     """Return the GUID from the given joystick object.
