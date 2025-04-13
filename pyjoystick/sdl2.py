@@ -740,21 +740,46 @@ class JoystickEventLoop(EventLoop):
 
     def get_joystick(self, event):
         """Return the joystick for this event"""
-        # NOTE: event.jdevice.which is the id to use for SDL_JoystickOpen() and SDL_JoystickFromInstanceID()
+        # NOTE: event.jdevice.which needs careful categorisation because device index is not at all compatible with instance id
+        # struct SDL_JoyDeviceEvent
+        # Sint32 which;       /**< The joystick device index for the ADDED event, instance id for the REMOVED event */
+        # For on_add() identifier = device index
+        if event.type == sdl2.SDL_JOYDEVICEADDED:
+            # print("JS get_joystick SDL_JOYDEVICEADDED")
+            return Joystick(identifier=event.jdevice.which)
+        if event.type == sdl2.SDL_CONTROLLERDEVICEADDED:
+            # print("JS get_joystick SDL_CONTROLLERDEVICEADDED")
+            return Joystick(identifier=event.jdevice.which)
+        # For all other joystick events instance_id = instance id
+        # SDL_JoystickID which; /**< The joystick instance id */
         return Joystick(instance_id=event.jdevice.which)
 
+    # This will be called 2x: once for Joystick and once for GameController if both SDL subsystems are initialized
+    # Joysticks that are supported game controllers receive both an SDL_JoyDeviceEvent and an SDL_ControllerDeviceEvent.
+    # ControllerEventLoop does not implement its own on_add
     def on_add(self, event):
+        assert event.type == sdl2.SDL_JOYDEVICEADDED or event.type == sdl2.SDL_CONTROLLERDEVICEADDED, \
+            "on_add event.type should be SDL_JOYDEVICEADDED or SDL_CONTROLLERDEVICEADDED"
         try:
+            # Joystick instance is created inside get_joystick
             self.add(self.get_joystick(event))
         except:
             pass
 
+
+    # This will be called 2x: once for Joystick and once for GameController if both SDL subsystems are initialized
+    # Joysticks that are supported game controllers receive both an SDL_JoyDeviceEvent and an SDL_ControllerDeviceEvent.
+    # ControllerEventLoop does not implement its own on_remove
     def on_remove(self, event):
+        assert event.type == sdl2.SDL_JOYDEVICEREMOVED or event.type == sdl2.SDL_CONTROLLERDEVICEREMOVED, \
+            "on_remove event.type should be SDL_JOYDEVICEREMOVED or SDL_CONTROLLERDEVICEREMOVED"
         try:
             self.remove(self.get_joystick(event))
         except:
             pass
 
+    # Joysticks that are supported game controllers receive both an SDL_JoyDeviceEvent and an SDL_ControllerDeviceEvent.
+    # ControllerEventLoop does not implement its own on_key_event
     def on_key_event(self, event):
         key = self.key_from_event(event, self.get_joystick(event))
         if key is not None:
@@ -788,7 +813,18 @@ class ControllerEventLoop(JoystickEventLoop):
 
     def get_joystick(self, event):
         """Return the joystick for this event"""
-        # NOTE: event.cdevice.which is the id for SDL_GameControllerOpen() and for SDL_GameControllerFromInstanceID()
+        # NOTE: event.cdevice.which needs careful categorisation because device index is not at all compatible with instance id
+        # struct SDL_ControllerDeviceEvent
+        # Sint32 which; /**< The joystick device index for the ADDED event, instance id for the REMOVED or REMAPPED event */
+        # For on_add() identifier = device index
+        if event.type == sdl2.SDL_JOYDEVICEADDED:
+            # print("GC get_joystick SDL_JOYDEVICEADDED")
+            return Joystick(identifier=event.jdevice.which)
+        if event.type == sdl2.SDL_CONTROLLERDEVICEADDED:
+            # print("GC get_joystick SDL_CONTROLLERDEVICEADDED")
+            return Joystick(identifier=event.cdevice.which)
+        # For all other joystick and gamecontroller events instance_id = instance id
+        # SDL_JoystickID which; /**< The joystick instance id */
         return Joystick(instance_id=event.cdevice.which)
 
     def on_mapped(self, event):
