@@ -34,9 +34,13 @@ __all__ = ['Key', 'Joystick', 'EventLoop', 'JoystickEventLoop', 'ControllerEvent
 class Joystick(BaseJoystick):
     @classmethod
     def get_joysticks(cls):
+        """
+        Note:
+            Initializes SDL2 Joystick submodule, if not already initialized.
+        """
         # Check init
-        if not get_init():
-            init()
+        if not get_init(sdl2.SDL_INIT_JOYSTICK):
+            init(sdl2.SDL_INIT_JOYSTICK)
 
         return Stash(cls(i) for i in range(sdl2.SDL_NumJoysticks()))  # Use identifier not instance id.
 
@@ -48,9 +52,9 @@ class Joystick(BaseJoystick):
         The term "device_index" identifies currently plugged in joystick devices between 0 and SDL_NumJoysticks(),
         with the exact joystick behind a device_index changing as joysticks are plugged and unplugged.
         """
-        # Check init
-        if not get_init():
-            init()
+
+        # Should never be uninitialized here since no events are received if SDL2 is not initialized -
+        # unless user manually constructs Joystick.
 
         # Create the object
         joy = super().__new__(cls)
@@ -712,8 +716,6 @@ class EventLoop:
 
     def __iter__(self):
         """Return this object as an iterator for use with the for loop or next()"""
-        if not get_init():
-            init()
         return self
 
     def __next__(self):
@@ -734,6 +736,8 @@ class JoystickEventLoop(EventLoop):
     def __init__(self, add=None, remove=None, handle_key=None, key_from_event=None,
                  alive=None, event=None, timeout=2000, **kwargs):
         """Initialize the event loop.
+        Note:
+            Also initializes SDL2 Joystick submodule, if not already initialized.
 
         Args:
             add (function/callable)[None]: Function that takes in a joystick on a SDL_JOYDEVICEADDED event.
@@ -760,6 +764,11 @@ class JoystickEventLoop(EventLoop):
         self.register(sdl2.SDL_JOYDEVICEADDED, self.on_add)
         self.register(sdl2.SDL_JOYDEVICEREMOVED, self.on_remove)
         self.register(None, self.on_key_event)  # Every other event
+
+        # Init SDL Joystick
+        # Init only Joystick is enough because gamepads are both joysticks and controllers
+        if not get_init(sdl2.SDL_INIT_JOYSTICK):
+            init(sdl2.SDL_INIT_JOYSTICK)
 
     def get_joystick(self, event):
         """Return the joystick for this event"""
@@ -816,6 +825,8 @@ class ControllerEventLoop(JoystickEventLoop):
     def __init__(self, add=None, remove=None, handle_key=None, key_from_event=None,
                  alive=None, event=None, timeout=2000, **kwargs):
         """Initialize the event loop.
+        Note:
+            Also initializes SDL2 GameController submodule, if not already initialized.
 
         Args:
             add (function/callable)[None]: Function that takes in a joystick on a SDL_JOYDEVICEADDED event.
@@ -833,6 +844,11 @@ class ControllerEventLoop(JoystickEventLoop):
 
         # Register base events
         self.register(sdl2.SDL_CONTROLLERDEVICEREMAPPED, self.on_mapped)
+
+        # Init SDL GameController
+        # Initializing GameController inits both GameController and Joystick subsystems
+        if not get_init(sdl2.SDL_INIT_GAMECONTROLLER):
+            init(sdl2.SDL_INIT_GAMECONTROLLER)
 
     def get_joystick(self, event):
         """Return the joystick for this event"""
