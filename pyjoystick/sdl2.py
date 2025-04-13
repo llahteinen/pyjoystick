@@ -216,10 +216,9 @@ def get_guid(joystick):
     Returns:
         guid (str): GUID String.
     """
-    try:
+    # If a pyjoystick Joystick was passed, get the internal SDL_Joystick
+    if isinstance(joystick, BaseJoystick):
         joystick = joystick.joystick
-    except:
-        pass
     guid = sdl2.SDL_JoystickGetGUID(joystick)
     guid_buff = ctypes.create_string_buffer(33)
     sdl2.SDL_JoystickGetGUIDString(guid, guid_buff, ctypes.sizeof(guid_buff))
@@ -685,10 +684,8 @@ class EventLoop:
 
     def stop(self):
         """Try to stop running the event loop."""
-        try:
+        if isinstance(self.alive, threading.Event):
             self.alive.clear()
-        except (AttributeError, Exception):
-            pass
         try:
             stop_event_wait()
         except (AttributeError, Exception):
@@ -696,23 +693,20 @@ class EventLoop:
 
     def run(self):
         """Run the event loop."""
-        try:
+        # Check type because alive can be threading.Event or function
+        if isinstance(self.alive, threading.Event):
             self.alive.set()
-        except (AttributeError, Exception):
-            pass
 
         for event in self:
             self.call_event(event)
 
     def is_alive(self):
         """Return if this event loop is alive and should keep running."""
-        try:
+        if isinstance(self.alive, threading.Event):
             return self.alive.is_set()  # If a threading event
-        except (AttributeError, TypeError, Exception):
-            try:
-                return self.alive()
-            except (AttributeError, TypeError, Exception):
-                return True
+        if callable(self.alive):
+            return self.alive()
+        return True
 
     def __iter__(self):
         """Return this object as an iterator for use with the for loop or next()"""
@@ -792,12 +786,14 @@ class JoystickEventLoop(EventLoop):
     def on_add(self, event):
         assert event.type == sdl2.SDL_JOYDEVICEADDED or event.type == sdl2.SDL_CONTROLLERDEVICEADDED, \
             "on_add event.type should be SDL_JOYDEVICEADDED or SDL_CONTROLLERDEVICEADDED"
+        joy = None
         try:
             # Joystick instance is created inside get_joystick
-            self.add(self.get_joystick(event))
+            joy = self.get_joystick(event)
         except:
             pass
-
+        if joy and callable(self.add):
+            self.add(joy)
 
     # This will be called 2x: once for Joystick and once for GameController if both SDL subsystems are initialized
     # Joysticks that are supported game controllers receive both an SDL_JoyDeviceEvent and an SDL_ControllerDeviceEvent.
@@ -805,16 +801,19 @@ class JoystickEventLoop(EventLoop):
     def on_remove(self, event):
         assert event.type == sdl2.SDL_JOYDEVICEREMOVED or event.type == sdl2.SDL_CONTROLLERDEVICEREMOVED, \
             "on_remove event.type should be SDL_JOYDEVICEREMOVED or SDL_CONTROLLERDEVICEREMOVED"
+        joy = None
         try:
-            self.remove(self.get_joystick(event))
+            joy = self.get_joystick(event)
         except:
             pass
+        if joy and callable(self.remove):
+            self.remove(joy)
 
     # Joysticks that are supported game controllers receive both an SDL_JoyDeviceEvent and an SDL_ControllerDeviceEvent.
     # ControllerEventLoop does not implement its own on_key_event
     def on_key_event(self, event):
         key = self.key_from_event(event, self.get_joystick(event))
-        if key is not None:
+        if key is not None and callable(self.handle_key):
             self.handle_key(key)
 
 
