@@ -42,7 +42,12 @@ class Joystick(BaseJoystick):
         if not get_init(sdl2.SDL_INIT_JOYSTICK):
             init(sdl2.SDL_INIT_JOYSTICK)
 
-        return Stash(cls(i) for i in range(sdl2.SDL_NumJoysticks()))  # Use identifier not instance id.
+        numjoysticks = sdl2.SDL_NumJoysticks()
+        # (int) Returns the number of attached joysticks on success or a negative error code on failure; call SDL_GetError() for more information.
+        # Also seems to return 0 if SDL2 is not initialized.
+        if numjoysticks < 0:
+            raise RuntimeError("SDL_NumJoysticks() error: {}".format(sdl2.SDL_GetError()))
+        return Stash(cls(identifier=i) for i in range(numjoysticks)) # Use identifier (device_index) not instance id.
 
     def __new__(cls, identifier=None, instance_id=None, *args, **kwargs):
         """
@@ -55,6 +60,9 @@ class Joystick(BaseJoystick):
 
         # Should never be uninitialized here since no events are received if SDL2 is not initialized -
         # unless user manually constructs Joystick.
+        # SDL_INIT_JOYSTICK should always be initialized, but SDL_INIT_GAMECONTROLLER not necessarily
+        if not get_init(sdl2.SDL_INIT_JOYSTICK):
+            raise RuntimeError("SDL2 SDL_INIT_JOYSTICK subsystem has not been initialized")
 
         # Create the object
         joy = super().__new__(cls)
@@ -70,7 +78,7 @@ class Joystick(BaseJoystick):
         if instance_id is not None:
             # Get the underlying joystick from the instance id (does NOT create a new one)
             # SDL_JOYDEVICEREMOVED and all other SDL_JOY#### events give the instance id
-            joy.joystick = sdl2.SDL_JoystickFromInstanceID(instance_id)
+            joy.joystick = sdl2.SDL_JoystickFromInstanceID(instance_id) # Returns NULL on errors
             # print('Instance ID:', joy.joystick, sdl2.SDL_JoystickGetAttached(joy.joystick))
         else:
             # Create the underlying joystick from the enumerated identifier
@@ -81,7 +89,7 @@ class Joystick(BaseJoystick):
                 # Get the joystick from the name or None if not found!
                 for i in range(sdl2.SDL_NumJoysticks()):
                     # Open using device_index (i)
-                    raw_joystick = sdl2.SDL_JoystickOpen(i)
+                    raw_joystick = sdl2.SDL_JoystickOpen(i) # Returns NULL on errors
                     try:
                         if sdl2.SDL_JoystickName(raw_joystick).decode('utf-8') == identifier:
                             joy.joystick = raw_joystick
@@ -92,8 +100,14 @@ class Joystick(BaseJoystick):
             else: # identifier is device_index
                 # Open using device_index
                 device_index = identifier
-                joy.joystick = sdl2.SDL_JoystickOpen(device_index)
+                joy.joystick = sdl2.SDL_JoystickOpen(device_index) # Returns NULL on errors
             # print('ID:', raw_joystick, SDL_JoystickGetAttached(raw_joystick))
+        # Check if SDL2 C-functions returned nullptr
+        if not joy.joystick:
+            # err = sdl2.SDL_GetError() # This does not seem to return much useful info
+            # print("Create Joystick failed: {}".format(err.decode()))
+            # Bail out from constructor with an exception to not return incomplete Joystick object
+            raise RuntimeError("SDL_Joystick creation failed: null pointer returned")
 
         try:
             # joy.identifier is instance id
@@ -146,6 +160,7 @@ class Joystick(BaseJoystick):
         """Return if this joystick is still active and available."""
         try:
             return sdl2.SDL_JoystickGetAttached(self.joystick)
+            # Returns SDL_TRUE if the joystick has been opened, SDL_FALSE if it has not; call SDL_GetError() for more information.
         except:
             return False
 
@@ -190,7 +205,10 @@ def init(*subsystems):
         sdl2.SDL_QuitSubSystem(flags)
     # int SDL_Init(Uint32 flags);
     # Uint32 flags subsystem initialization flags.
-    res = sdl2.SDL_Init(flags)
+    res = sdl2.SDL_Init(flags) # Returns 0 on success or a negative error code on failure
+    if res != 0:
+        err = sdl2.SDL_GetError()
+        raise RuntimeError("SDL_Init({}) error: {}".format(flags, err))
 
 def quit(*subsystems):
     """Quit the given subsystem(s).
@@ -706,7 +724,7 @@ class EventLoop:
             return self.alive.is_set()  # If a threading event
         if callable(self.alive):
             return self.alive()
-        return True
+        raise TypeError("Invalid type for alive")
 
     def __iter__(self):
         """Return this object as an iterator for use with the for loop or next()"""
