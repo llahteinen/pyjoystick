@@ -70,7 +70,7 @@ class Joystick(BaseJoystick):
         if instance_id is not None:
             # Get the underlying joystick from the instance id (does NOT create a new one)
             # SDL_JOYDEVICEREMOVED and all other SDL_JOY#### events give the instance id
-            joy.joystick = sdl2.SDL_JoystickFromInstanceID(instance_id)
+            joy.joystick = sdl2.SDL_JoystickFromInstanceID(instance_id) # Returns NULL on errors
             # print('Instance ID:', joy.joystick, sdl2.SDL_JoystickGetAttached(joy.joystick))
         else:
             # Create the underlying joystick from the enumerated identifier
@@ -81,7 +81,7 @@ class Joystick(BaseJoystick):
                 # Get the joystick from the name or None if not found!
                 for i in range(sdl2.SDL_NumJoysticks()):
                     # Open using device_index (i)
-                    raw_joystick = sdl2.SDL_JoystickOpen(i)
+                    raw_joystick = sdl2.SDL_JoystickOpen(i) # Returns NULL on errors
                     try:
                         if sdl2.SDL_JoystickName(raw_joystick).decode('utf-8') == identifier:
                             joy.joystick = raw_joystick
@@ -92,8 +92,14 @@ class Joystick(BaseJoystick):
             else: # identifier is device_index
                 # Open using device_index
                 device_index = identifier
-                joy.joystick = sdl2.SDL_JoystickOpen(device_index)
+                joy.joystick = sdl2.SDL_JoystickOpen(device_index) # Returns NULL on errors
             # print('ID:', raw_joystick, SDL_JoystickGetAttached(raw_joystick))
+        # Check if SDL2 C-functions returned nullptr
+        if not joy.joystick:
+            # err = sdl2.SDL_GetError() # This does not seem to return much useful info
+            # print("Create Joystick failed: {}".format(err.decode()))
+            # Bail out from constructor with an exception to not return incomplete Joystick object
+            raise RuntimeError("SDL_Joystick creation failed: null pointer returned")
 
         try:
             # joy.identifier is instance id
@@ -146,6 +152,7 @@ class Joystick(BaseJoystick):
         """Return if this joystick is still active and available."""
         try:
             return sdl2.SDL_JoystickGetAttached(self.joystick)
+            # Returns SDL_TRUE if the joystick has been opened, SDL_FALSE if it has not; call SDL_GetError() for more information.
         except:
             return False
 
