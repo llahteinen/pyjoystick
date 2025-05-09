@@ -793,9 +793,10 @@ class JoystickEventLoop(EventLoop):
         # SDL_JoystickID which; /**< The joystick instance id */
         return Joystick(instance_id=event.jdevice.which)
 
-    # This will be called 2x: once for Joystick and once for GameController if both SDL subsystems are initialized
     # Joysticks that are supported game controllers receive both an SDL_JoyDeviceEvent and an SDL_ControllerDeviceEvent.
     # ControllerEventLoop does not implement its own on_add
+    # By default in JoystickEventLoop and ControllerEventLoop SDL_CONTROLLERDEVICEADDED events are not registered to on_add.
+    # GameController devices on_add is instead called via the SDL_JOYDEVICEADDED event.
     def on_add(self, event):
         assert event.type == sdl2.SDL_JOYDEVICEADDED or event.type == sdl2.SDL_CONTROLLERDEVICEADDED, \
             "on_add event.type should be SDL_JOYDEVICEADDED or SDL_CONTROLLERDEVICEADDED"
@@ -805,10 +806,10 @@ class JoystickEventLoop(EventLoop):
         except:
             pass
 
-
-    # This will be called 2x: once for Joystick and once for GameController if both SDL subsystems are initialized
     # Joysticks that are supported game controllers receive both an SDL_JoyDeviceEvent and an SDL_ControllerDeviceEvent.
     # ControllerEventLoop does not implement its own on_remove
+    # By default in JoystickEventLoop and ControllerEventLoop SDL_CONTROLLERDEVICEREMOVED events are not registered to on_remove.
+    # GameController devices on_remove is instead called via the SDL_JOYDEVICEREMOVED event.
     def on_remove(self, event):
         assert event.type == sdl2.SDL_JOYDEVICEREMOVED or event.type == sdl2.SDL_CONTROLLERDEVICEREMOVED, \
             "on_remove event.type should be SDL_JOYDEVICEREMOVED or SDL_CONTROLLERDEVICEREMOVED"
@@ -819,6 +820,8 @@ class JoystickEventLoop(EventLoop):
 
     # Joysticks that are supported game controllers receive both an SDL_JoyDeviceEvent and an SDL_ControllerDeviceEvent.
     # ControllerEventLoop does not implement its own on_key_event
+    # When using ControllerEventLoop with the default settings, this will be called 2x: once for Joystick and once
+    # for GameController via e.g. SDL_JOYBUTTONDOWN and SDL_CONTROLLERBUTTONDOWN events.
     def on_key_event(self, event):
         key = self.key_from_event(event, self.get_joystick(event))
         if key is not None:
